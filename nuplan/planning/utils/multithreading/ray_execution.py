@@ -86,11 +86,11 @@ def _ray_map_items(task: Task, *item_lists: Iterable[List[Any]], log_dir: Option
         _, _, pack = fn.__reduce__()  # type: ignore
         fn, _, args, _ = pack
         fn = wrap_function(fn, log_dir=log_dir)
-        remote_fn: RemoteFunction = ray.remote(fn).options(num_gpus=task.num_gpus, num_cpus=task.num_cpus)
+        remote_fn: RemoteFunction = ray.remote(max_calls=1)(fn).options(num_gpus=task.num_gpus, num_cpus=task.num_cpus)
         object_ids = [remote_fn.remote(*items, **args) for items in zip(*item_lists)]
     else:
         fn = wrap_function(fn, log_dir=log_dir)
-        remote_fn = ray.remote(fn).options(num_gpus=task.num_gpus, num_cpus=task.num_cpus)
+        remote_fn = ray.remote(max_calls=1)(fn).options(num_gpus=task.num_gpus, num_cpus=task.num_cpus)
         object_ids = [remote_fn.remote(*items) for items in zip(*item_lists)]
 
     # Create ordered map to track order of objects inserted in the queue

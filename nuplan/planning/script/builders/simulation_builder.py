@@ -24,6 +24,7 @@ from nuplan.planning.simulation.simulation_time_controller.abstract_simulation_t
     AbstractSimulationTimeController,
 )
 from nuplan.planning.utils.multithreading.worker_pool import WorkerPool
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +81,7 @@ def build_simulations(
     logger.info('Building simulations from %d scenarios...', len(scenarios))
 
     # Build a metric metadata file
-    for scenario in scenarios:
+    for scenario in tqdm(scenarios):
 
         # Build planners
         if pre_built_planners is None:
