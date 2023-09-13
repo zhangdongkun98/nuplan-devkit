@@ -2,6 +2,9 @@ import logging
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Set, cast
+import os
+import numpy as np
+import time
 
 from omegaconf import DictConfig
 
@@ -64,7 +67,7 @@ def get_s3_scenario_cache(
     return scenario_cache_paths
 
 
-def get_local_scenario_cache(cache_path: str, feature_names: Set[str]) -> List[Path]:
+def get_local_scenario_cache(cfg: DictConfig, cache_path: str, feature_names: Set[str]) -> List[Path]:
     """
     Get a list of cached scenario paths from a local cache.
     :param cache_path: Root path of the local cache dir.
@@ -75,14 +78,25 @@ def get_local_scenario_cache(cache_path: str, feature_names: Set[str]) -> List[P
     assert cache_dir.exists(), f'Local cache {cache_dir} does not exist!'
     assert any(cache_dir.iterdir()), f'No files found in the local cache {cache_dir}!'
 
-    candidate_scenario_dirs = {x.parent for x in cache_dir.rglob("*.gz")}
-
-    # Keep only dir paths that contains all required feature names
-    scenario_cache_paths = [
-        path
-        for path in candidate_scenario_dirs
-        if not (feature_names - {feature_name.stem for feature_name in path.iterdir()})
-    ]
+    cache_scenario_dir = cache_dir.parent / f'cache_{cache_dir.name}_{os.path.split(cfg.scenario_builder.data_root)[1]}'
+    cache_scenario_path = cache_scenario_dir / 'scenario_cache_paths.txt'
+    if cache_scenario_path.is_file():
+        t1 = time.time()
+        paths = np.loadtxt(cache_scenario_path, dtype='str')
+        t2 = time.time()
+        logger.info(f'load offline scenario_cache_paths, this is fast (load time: {t2-t1}).')
+        scenario_cache_paths = [Path(path) for path in paths]
+    else:
+        cache_scenario_dir.mkdir(exist_ok=True)
+        logger.warning('\n\n\n\n\nonline generating scenario_cache_paths, this is slow !!!\n\n\n\n\n')
+        candidate_scenario_dirs = {x.parent for x in cache_dir.rglob("*.gz")}
+        # Keep only dir paths that contains all required feature names
+        scenario_cache_paths = [
+            path
+            for path in candidate_scenario_dirs
+            if not (feature_names - {feature_name.stem for feature_name in path.iterdir()})
+        ]
+        np.savetxt(cache_scenario_path,  np.array([str(path) for path in scenario_cache_paths]), fmt="%s")
 
     return scenario_cache_paths
 
@@ -108,7 +122,7 @@ def extract_scenarios_from_cache(
     scenario_cache_paths = (
         get_s3_scenario_cache(cache_path, feature_names, worker)
         if cache_path.startswith('s3://')
-        else get_local_scenario_cache(cache_path, feature_names)
+        else get_local_scenario_cache(cfg, cache_path, feature_names)
     )
 
     def filter_scenario_cache_paths_by_scenario_type(paths: List[Path]) -> List[Path]:
