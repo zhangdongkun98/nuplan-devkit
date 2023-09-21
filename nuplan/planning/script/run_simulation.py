@@ -16,6 +16,7 @@ from nuplan.planning.script.builders.simulation_callback_builder import (
 )
 from nuplan.planning.script.utils import run_runners, set_default_path, set_up_common_builder
 from nuplan.planning.simulation.planner.abstract_planner import AbstractPlanner
+from nuplan.planning.simulation.main_callback.metric_aggregator_callback import MetricAggregatorCallback
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -78,6 +79,7 @@ def run_simulation(cfg: DictConfig, planners: Optional[Union[AbstractPlanner, Li
     logger.info('Running simulation...')
     run_runners(runners=runners, common_builder=common_builder, cfg=cfg, profiler_name='running_simulation')
     logger.info('Finished running simulation!')
+    return common_builder
 
 
 def clean_up_s3_artifacts() -> None:
@@ -107,10 +109,23 @@ def main(cfg: DictConfig) -> None:
     assert cfg.simulation_log_main_path is None, 'Simulation_log_main_path must not be set when running simulation.'
 
     # Execute simulation with preconfigured planner(s).
-    run_simulation(cfg=cfg)
+    common_builder = run_simulation(cfg=cfg)
 
     if is_s3_path(Path(cfg.output_dir)):
         clean_up_s3_artifacts()
+
+
+    ### print metric
+    callbacks = [callback for callback in common_builder.multi_main_callback._main_callbacks if isinstance(callback, MetricAggregatorCallback)]
+    
+    print('\n\n\nload dataframe: ', callbacks[0]._metric_aggregators[0]._parquet_file)
+    df = callbacks[0]._metric_aggregators[0]._aggregated_metric_dataframe
+    df.to_csv(f'{cfg.output_dir}/metrics/res.csv')
+    print(df)
+    print('\n')
+    print(df[df['scenario'] == 'final_score'])
+
+
 
 
 if __name__ == '__main__':
